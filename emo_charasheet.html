@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <titleキャラシート画像化ツール（JSON対応）</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=DotGothic16&family=Hachi+Maru+Pop&family=Potta+One&family=Shippori+Mincho&family=Yuji+Mai&family=Yusei+Magic&family=Zen+Old+Mincho&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    canvas {
+      border: 1px solid #999;
+      margin-top: 20px;
+    }
+    textarea {
+      width: 100%;
+      height: 200px;
+    }
+    select, input[type="color"] {
+      margin-top: 10px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>キャラシート画像化ツール（JSON対応）</h1>
+
+  <label>キャラクター名フォントを選択：</label>
+  <select id="fontSelector">
+    <option value="Dela Gothic One" style="font-family: 'Dela Gothic One'">Dela Gothic One</option>
+    <option value="DotGothic16" style="font-family: 'DotGothic16'">DotGothic16</option>
+    <option value="Hachi Maru Pop" style="font-family: 'Hachi Maru Pop'">Hachi Maru Pop</option>
+    <option value="Potta One" style="font-family: 'Potta One'">Potta One</option>
+    <option value="Shippori Mincho" style="font-family: 'Shippori Mincho'">Shippori Mincho</option>
+    <option value="Yuji Mai" style="font-family: 'Yuji Mai'">Yuji Mai</option>
+    <option value="Yusei Magic" style="font-family: 'Yusei Magic'">Yusei Magic</option>
+    <option value="Zen Old Mincho" style="font-family: 'Zen Old Mincho'">Zen Old Mincho</option>
+    <option value="CustomFont">アップロードフォント</option>
+  </select>
+  <label>名前サイズ:</label>
+  <select id="nameSize">
+    <option value="54">小</option>
+    <option value="72">中</option>
+    <option value="90">大</option>
+  </select>
+    <option value="Dela Gothic One">Dela Gothic One</option>
+    <option value="DotGothic16">DotGothic16</option>
+    <option value="Hachi Maru Pop">Hachi Maru Pop</option>
+    <option value="Potta One">Potta One</option>
+    <option value="Shippori Mincho">Shippori Mincho</option>
+    <option value="Yuji Mai">Yuji Mai</option>
+    <option value="Yusei Magic">Yusei Magic</option>
+    <option value="Zen Old Mincho">Zen Old Mincho</option>
+    <option value="CustomFont">アップロードフォント</option>
+  </select>
+  <label>ローカルフォントファイルを選択（TTF/OTF）:</label>
+  <input type="file" id="fontInput" accept=".ttf,.otf" />
+  <br>
+  <label>背景色:</label> <input type="color" id="bgColor" value="#ffffff">
+  <label>名前の文字色:</label> <input type="color" id="nameColor" value="#000000">
+  <label>本文の文字色:</label> <input type="color" id="textColor" value="#000000">
+  <br><br>
+  <label>枠線をつける:</label>
+  <input type="checkbox" id="borderEnabled">
+  <label>枠線の色:</label>
+  <input type="color" id="borderColor" value="#000000">
+  <label>枠線の太さ:</label>
+  <input type="number" id="borderWidth" value="4" min="1" max="20">
+
+  <input type="file" id="bgImageInput" accept="image/*">
+  <br><br>
+  <label>名前に縁取り:</label>
+  <input type="checkbox" id="nameStroke">
+  <label>縁の色:</label>
+  <input type="color" id="nameStrokeColor" value="#ffffff">
+  <br>
+  <label>本文に縁取り:</label>
+  <input type="checkbox" id="textStroke">
+  <label>縁の色:</label>
+  <input type="color" id="textStrokeColor" value="#ffffff">
+
+  <label>キャラシートJSONを貼り付けてください:</label><br>
+  <textarea id="jsonInput"></textarea><br>
+
+  <button onclick="generateImage()">画像を生成</button>
+  <button onclick="downloadImage()">画像をダウンロード</button>
+
+  <canvas id="charCanvas" width="600" height="600"></canvas>
+
+  <script>
+    let customFontLoaded = false;
+let bgImageBitmap = null;
+
+// 背景画像読み込み
+const bgInput = document.getElementById('bgImageInput');
+bgInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const bitmap = await createImageBitmap(file);
+  window.bgImageBitmap = bitmap;
+});
+
+    document.getElementById('fontInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const fontData = event.target.result;
+          const font = new FontFace('CustomFont', fontData);
+          await font.load();
+          document.fonts.add(font);
+          customFontLoaded = true;
+          alert('フォントが読み込まれました！');
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    });
+
+    function extractDataFromJSON(jsonStr) {
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const data = parsed.data || {};
+
+        const name = data.name || 'キャラ名不明';
+        const params = data.params || [];
+        const abilitiesLine1 = params.slice(0, 4).map(p => `${p.label}:${p.value}`).join(' / ');
+        const abilitiesLine2 = params.slice(4).map(p => `${p.label}:${p.value}`).join(' / ');
+
+        const memo = data.memo || '';
+        const emotionLines = memo.split(/\n|\r/).filter(line => line.includes('共鳴感情')).map(line => line.trim());
+
+        const commands = data.commands || '';
+        const skills = commands.split(/\n|\r/)
+  .filter(line => line.match(/[〈《].+[〉》]/) && !line.includes('{共鳴}'))
+  .map(line => {
+    if (line.includes('＊')) {
+      const match = line.match(/<=([0-9]+)/);
+      const skillName = line.match(/[〈《](.+?)[〉》]/)?.[1].replace(/^＊/, '') || '（不明）';
+      const target = match ? match[1] : '?';
+      return `＊${skillName} ${target}`;
+    } else {
+      const levelMatch = line.match(/([0-9]+)DM<=([0-9]+)/);
+      const nameMatch = line.match(/[〈《](.+?)[〉》]/);
+      const level = levelMatch ? levelMatch[1] : '?';
+      const target = levelMatch ? levelMatch[2] : '?';
+      const skillName = nameMatch ? nameMatch[1] : '（不明）';
+      return `${skillName} ${level}Lv/${target}`;
+    }
+  });
+
+        return { name, abilitiesLine1, abilitiesLine2, emotionLines, skills };
+      } catch (e) {
+        alert('JSONの読み込みに失敗しました');
+        return { name: 'エラー', abilitiesLine1: '', abilitiesLine2: '', emotionLines: [], skills: [] };
+      }
+    }
+
+    function generateImage() {
+  const canvas = document.getElementById('charCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const bgColor = document.getElementById('bgColor').value;
+  const nameColor = document.getElementById('nameColor').value;
+  const textColor = document.getElementById('textColor').value;
+  const useFont = document.getElementById('fontSelector').value;
+  const jsonStr = document.getElementById('jsonInput').value;
+  const { name, abilitiesLine1, abilitiesLine2, emotionLines, skills } = extractDataFromJSON(jsonStr);
+
+  const nameStroke = document.getElementById('nameStroke').checked;
+  const nameStrokeColor = document.getElementById('nameStrokeColor').value;
+  const textStroke = document.getElementById('textStroke').checked;
+  const textStrokeColor = document.getElementById('textStrokeColor').value;
+
+  const nameSize = parseInt(document.getElementById('nameSize').value);
+
+  if (window.bgImageBitmap) {
+    const { width, height } = window.bgImageBitmap;
+    const minDim = Math.min(width, height);
+    const sx = (width - minDim) / 2;
+    const sy = (height - minDim) / 2;
+    ctx.drawImage(window.bgImageBitmap, sx, sy, minDim, minDim, 0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // 名前描画
+  const topMargin = 20;
+  const bottomMargin = 20;
+  const availableHeight = canvas.height - topMargin - bottomMargin;
+  let fittedSize = nameSize;
+  if (name.length * fittedSize > availableHeight) {
+    fittedSize = Math.floor(availableHeight / name.length);
+  }
+  ctx.font = `${fittedSize}px "${useFont}", sans-serif`;
+  ctx.fillStyle = nameColor;
+  const startY = topMargin + fittedSize;
+  for (let i = 0; i < name.length; i++) {
+    const y = startY + i * fittedSize;
+    if (y <= canvas.height - bottomMargin) {
+      if (nameStroke) {
+        ctx.strokeStyle = nameStrokeColor;
+        ctx.lineWidth = 6;
+        ctx.strokeText(name[i], 40, y);
+      }
+      ctx.fillText(name[i], 40, y);
+    }
+  }
+
+  // 本文描画
+  ctx.font = '16px sans-serif';
+  ctx.fillStyle = textColor;
+  ctx.textBaseline = 'top';
+
+  function drawText(text, x, y) {
+    if (textStroke) {
+      ctx.strokeStyle = textStrokeColor;
+      ctx.lineWidth = 3;
+      ctx.strokeText(text, x, y);
+    }
+    ctx.fillText(text, x, y);
+  }
+
+  drawText(abilitiesLine1, 180, 40);
+  drawText(abilitiesLine2, 180, 60);
+  drawText('共鳴感情:', 180, 90);
+  emotionLines.forEach((line, i) => drawText(line, 200, 115 + i * 20));
+  drawText('技能:', 180, 190);
+
+  const regularSkills = skills.filter(s => !s.includes('＊'));
+  const specialSkills = skills.filter(s => s.includes('＊'));
+
+  let yOffset = 215;
+  const maxWidth = 320;
+
+  regularSkills.forEach(l => {
+    const text = '- ' + l;
+    const words = text.split(' ');
+    let line = '';
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const testWidth = ctx.measureText(testLine).width;
+      if (testWidth > maxWidth && n > 0) {
+        drawText(line.trim(), 200, yOffset);
+        line = words[n] + ' ';
+        yOffset += 20;
+      } else {
+        line = testLine;
+      }
+    }
+    drawText(line.trim(), 200, yOffset);
+    yOffset += 20;
+  });
+
+  const x = 480;
+  specialSkills.slice(0, 10).forEach((skill, i) => {
+    const y = 420 + i * 16;
+    ctx.font = '12px sans-serif';
+    drawText('- ' + skill, x, y);
+  });
+  if (document.getElementById('borderEnabled').checked) {
+  ctx.strokeStyle = document.getElementById('borderColor').value;
+  ctx.lineWidth = parseInt(document.getElementById('borderWidth').value);
+  ctx.strokeRect(0, 0, canvas.width, canvas.height);
+}
+
+}
+
+function downloadImage() {
+      const canvas = document.getElementById('charCanvas');
+      const link = document.createElement('a');
+      link.download = 'charasheet.png';
+      link.href = canvas.toDataURL();
+      link.click();
+    }
+  </script>
+</body>
+</html>
