@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チャットHTMLメーカー</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            text-align: center;
+        }
+        .chat-container {
+            width: 60%;
+            margin: 20px auto;
+            text-align: left;
+        }
+        .chat-message {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .chat-icon {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 3px solid #ccc;
+            overflow: hidden;
+        }
+        .chat-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .chat-content {
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+            max-width: 80%;
+            white-space: pre-wrap;
+        }
+        .chat-name {
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+        .form-container {
+            margin-bottom: 20px;
+        }
+        input, button, select, textarea {
+            padding: 5px;
+            margin: 5px;
+        }
+        textarea {
+            width: 90%;
+            height: 60px;
+            resize: vertical;
+        }
+        .narrative-text {
+            display: block;
+            max-width: 50%;
+            margin: 20px auto;
+            font-size: 16px;
+            color: #333;
+            white-space: pre-wrap;
+            text-align: left;
+        }
+        .narrative-strong {
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .color-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin-top: 5px;
+        }
+        .color-button {
+            width: 25px;
+            height: 25px;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        @media screen and (max-width: 768px) {
+    .chat-container {
+        width: 100%;
+        max-width: 95%;
+    }
+    .chat-message {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .chat-icon {
+        width: 60px;
+        height: 60px;
+        margin-bottom: 5px;
+    }
+    .chat-content {
+        max-width: 100%;
+    }
+    .narrative-text {
+        max-width: 90%;
+    }
+}
+    </style>
+</head>
+<body>
+
+    <h1>チャットHTMLメーカー</h1>
+
+    <div class="form-container">
+        <label>文章タイプ：</label>
+        <select id="textType" onchange="toggleNarrativeOptions()">
+            <option value="dialogue">セリフ（アイコン付き）</option>
+            <option value="narrative">地の文（アイコンなし）</option>
+        </select>
+        <br>
+        <div id="narrativeOptions" style="display: none;">
+            <input type="checkbox" id="boldText"> <label for="boldText">強調（小見出し）</label>
+        </div>
+        <label>発言者を選択：</label>
+        <select id="speakerSelect" onchange="loadSpeaker()">
+            <option value="">新しい発言者</option>
+        </select>
+        <br>
+        <input type="text" id="name" placeholder="名前">
+        <input type="text" id="iconUrl" placeholder="アイコンURL">
+        <br>
+        <textarea id="message" placeholder="メッセージを入力（改行可）"></textarea>
+        <br>
+        <label>名前＆枠の色：</label>
+        <input type="color" id="textColor" value="#000000">
+        <div class="color-buttons">
+            <button class="color-button" style="background: #ff4d4d;" onclick="setColor('#ff4d4d')"></button>
+            <button class="color-button" style="background: #ff9800;" onclick="setColor('#ff9800')"></button>
+            <button class="color-button" style="background: #ffeb3b;" onclick="setColor('#ffeb3b')"></button>
+            <button class="color-button" style="background: #4caf50;" onclick="setColor('#4caf50')"></button>
+            <button class="color-button" style="background: #2196f3;" onclick="setColor('#2196f3')"></button>
+            <button class="color-button" style="background: #9c27b0;" onclick="setColor('#9c27b0')"></button>
+        </div>
+        <button onclick="addChat()">追加</button>
+        <!-- 発言者の選択リストを管理するためのボタンを追加 -->
+<button onclick="registerSpeaker()">発言者を登録</button>
+
+        <button onclick="saveAsHtml()">HTMLとして保存</button>
+    </div>
+
+    <div class="chat-container" id="chatOutput">
+        <!-- ここにチャットが追加される -->
+    </div>
+
+    <script>
+        function toggleNarrativeOptions() {
+            document.getElementById("narrativeOptions").style.display = 
+                document.getElementById("textType").value === "narrative" ? "block" : "none";
+        }
+
+        function setColor(color) {
+            document.getElementById("textColor").value = color;
+        }
+
+        function addChat() {
+            const textType = document.getElementById("textType").value;
+            const name = document.getElementById("name").value;
+            const iconUrl = document.getElementById("iconUrl").value;
+            const message = document.getElementById("message").value;
+            const textColor = document.getElementById("textColor").value;
+            const isBold = document.getElementById("boldText").checked;
+
+            if (!message) {
+                alert("メッセージを入力してください！");
+                return;
+            }
+
+            const chatContainer = document.getElementById("chatOutput");
+
+            if (textType === "dialogue") {
+                if (!name || !iconUrl) {
+                    alert("セリフには名前とアイコンが必要です！");
+                    return;
+                }
+
+                const chatMessage = document.createElement("div");
+                chatMessage.classList.add("chat-message");
+
+                const chatIcon = document.createElement("div");
+                chatIcon.classList.add("chat-icon");
+                chatIcon.style.borderColor = textColor;
+                chatIcon.innerHTML = `<img src="${iconUrl}" alt="${name}">`;
+
+                const chatContent = document.createElement("div");
+                chatContent.classList.add("chat-content");
+
+                const chatName = document.createElement("div");
+                chatName.classList.add("chat-name");
+                chatName.style.color = textColor;
+                chatName.textContent = name;
+
+                const chatText = document.createElement("div");
+                chatText.textContent = message;
+
+                chatContent.appendChild(chatName);
+                chatContent.appendChild(chatText);
+                chatMessage.appendChild(chatIcon);
+                chatMessage.appendChild(chatContent);
+                chatContainer.appendChild(chatMessage);
+
+            } else {
+                const narrativeText = document.createElement("div");
+                narrativeText.classList.add("narrative-text");
+                if (isBold) narrativeText.classList.add("narrative-strong");
+                narrativeText.textContent = message;
+                chatContainer.appendChild(narrativeText);
+            }
+
+            document.getElementById("message").value = "";
+            document.getElementById("boldText").checked = false;
+        }
+
+        function saveAsHtml() {
+    const chatContainer = document.getElementById("chatOutput").cloneNode(true);
+    
+    // 削除ボタンをすべて削除
+    chatContainer.querySelectorAll("button").forEach(button => button.remove());
+
+    const chatContent = chatContainer.innerHTML;
+
+    const blob = new Blob([
+        `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+        <title>チャットログ</title><style>${document.querySelector("style").innerHTML}</style></head>
+        <body><div class="chat-container">${chatContent}</div></body></html>`
+    ], { type: "text/html" });
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "chatlog.html";
+    a.click();
+}
+        
+
+// 発言者リストの読み込みと保存
+function loadSpeakers() {
+    const savedSpeakers = JSON.parse(localStorage.getItem("speakers")) || [];
+    const speakerSelect = document.getElementById("speakerSelect");
+    
+    // 既存のリストをクリア
+    speakerSelect.innerHTML = '<option value="">新しい発言者</option>';
+    
+    savedSpeakers.forEach(speaker => {
+        const option = document.createElement("option");
+        option.value = speaker.name;
+        option.textContent = speaker.name;
+        option.dataset.icon = speaker.icon;
+        option.dataset.color = speaker.color;
+        speakerSelect.appendChild(option);
+    });
+}
+
+// 発言者を登録する
+function registerSpeaker() {
+    const name = document.getElementById("name").value;
+    const iconUrl = document.getElementById("iconUrl").value;
+    const textColor = document.getElementById("textColor").value;
+
+    if (!name || !iconUrl) {
+        alert("名前とアイコンURLを入力してください！");
+        return;
+    }
+
+    const savedSpeakers = JSON.parse(localStorage.getItem("speakers")) || [];
+    
+    // すでに同じ名前の発言者がいるかチェック
+    const exists = savedSpeakers.some(speaker => speaker.name === name);
+    if (!exists) {
+        savedSpeakers.push({ name, icon: iconUrl, color: textColor });
+        localStorage.setItem("speakers", JSON.stringify(savedSpeakers));
+        loadSpeakers();
+    }
+}
+
+// 発言者を選択するとデータをセットする
+function loadSpeaker() {
+    const speakerSelect = document.getElementById("speakerSelect");
+    const selectedOption = speakerSelect.options[speakerSelect.selectedIndex];
+
+    if (selectedOption.value) {
+        document.getElementById("name").value = selectedOption.value;
+        document.getElementById("iconUrl").value = selectedOption.dataset.icon;
+        document.getElementById("textColor").value = selectedOption.dataset.color;
+    } else {
+        // 新規発言者を選択した場合、入力欄をクリア
+        document.getElementById("name").value = "";
+        document.getElementById("iconUrl").value = "";
+        document.getElementById("textColor").value = "#000000";
+    }
+}
+
+// ページ読み込み時に発言者リストをクリア
+window.onload = function() {
+    localStorage.removeItem("speakers");  // 発言者リストを削除
+    loadSpeakers(); // 空のリストをロード
+};
+
+
+function addChat() {
+    const textType = document.getElementById("textType").value;
+    const name = document.getElementById("name").value;
+    const iconUrl = document.getElementById("iconUrl").value;
+    const message = document.getElementById("message").value;
+    const textColor = document.getElementById("textColor").value;
+    const isBold = document.getElementById("boldText").checked;
+
+    if (!message) {
+        alert("メッセージを入力してください！");
+        return;
+    }
+
+    const chatContainer = document.getElementById("chatOutput");
+    const chatMessage = document.createElement("div");
+    chatMessage.classList.add("chat-message");
+
+    if (textType === "dialogue") {
+        if (!name || !iconUrl) {
+            alert("セリフには名前とアイコンが必要です！");
+            return;
+        }
+
+        const chatIcon = document.createElement("div");
+        chatIcon.classList.add("chat-icon");
+        chatIcon.style.borderColor = textColor;
+        chatIcon.innerHTML = `<img src="${iconUrl}" alt="${name}">`;
+
+        const chatContent = document.createElement("div");
+        chatContent.classList.add("chat-content");
+
+        const chatName = document.createElement("div");
+        chatName.classList.add("chat-name");
+        chatName.style.color = textColor;
+        chatName.textContent = name;
+
+        const chatText = document.createElement("div");
+        chatText.textContent = message;
+
+        // **削除ボタンを作成**
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "削除";
+        deleteButton.classList.add("delete-button");  // クラス追加
+        deleteButton.style.marginLeft = "10px";
+        deleteButton.onclick = () => chatMessage.remove(); // **正しい対象を削除**
+
+        // **チャット要素を組み立てる**
+        chatContent.appendChild(chatName);
+        chatContent.appendChild(chatText);
+        chatContent.appendChild(deleteButton);
+        chatMessage.appendChild(chatIcon);
+        chatMessage.appendChild(chatContent);
+        chatContainer.appendChild(chatMessage);
+
+    } else {
+        // **地の文（ナラティブ）の場合**
+        const narrativeText = document.createElement("div");
+        narrativeText.classList.add("narrative-text");
+        if (isBold) narrativeText.classList.add("narrative-strong");
+        narrativeText.textContent = message;
+
+        // **削除ボタンを作成**
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "削除";
+        deleteButton.classList.add("delete-button");  // クラス追加
+        deleteButton.style.marginLeft = "10px";
+        deleteButton.onclick = () => narrativeText.remove(); // **正しい対象を削除**
+
+        // **ナラティブ要素を組み立てる**
+        narrativeText.appendChild(deleteButton);
+        chatContainer.appendChild(narrativeText);
+    }
+
+    document.getElementById("message").value = "";
+    document.getElementById("boldText").checked = false;
+}
+
+    </script>
+
+</body>
+</html>

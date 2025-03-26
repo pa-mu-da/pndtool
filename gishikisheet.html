@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>儀式シート作成ツール</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Yuji+Mai&family=Zen+Old+Mincho&display=swap');
+
+    body {
+      font-family: 'Zen Old Mincho', serif;
+      text-align: center;
+      padding: 20px;
+    }
+
+    input[type="text"] {
+      display: block;
+      margin: 5px auto;
+      width: 90%;
+      max-width: 500px;
+    }
+
+    canvas {
+      border: 1px solid #ccc;
+      margin-top: 20px;
+    }
+
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+    }
+
+    .color-controls {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .color-controls div {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>儀式シート生成ツール</h1>
+
+  <label>タイトル（儀式の名前）:</label>
+  <input type="text" id="title" placeholder="例：魂の交換式">
+
+  <div class="color-controls">
+    <div>
+      <label>背景色</label>
+      <input type="color" id="bgColor" value="#ffffff">
+    </div>
+    <div>
+      <label>罫線の色</label>
+      <input type="color" id="borderColor" value="#000000">
+    </div>
+    <div>
+      <label>文字色</label>
+      <input type="color" id="textColor" value="#000000">
+    </div>
+  </div>
+
+  <div id="steps"></div>
+  <button onclick="addStep()">手順を追加</button>
+  <button onclick="drawSheet()">儀式シートを生成</button>
+  <br>
+  <canvas id="ritualCanvas"></canvas>
+  <br>
+  <button id="downloadBtn">画像を保存</button>
+
+  <script>
+    const canvas = document.getElementById('ritualCanvas');
+    const ctx = canvas.getContext('2d');
+    let stepCount = 0;
+
+    const canvasWidth = 600;
+    const columnRatios = [1, 2, 1.5, 2.75, 2.75];
+    const totalRatio = columnRatios.reduce((a, b) => a + b, 0);
+    const colWidths = columnRatios.map(r => (r / totalRatio) * canvasWidth);
+
+    const baseFont = "16px 'Zen Old Mincho'";
+    const lineHeight = 20;
+    const padding = 5;
+
+    function addStep() {
+      stepCount++;
+      const container = document.getElementById('steps');
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <h3>段階 ${stepCount}</h3>
+        <input type="text" placeholder="手順の名前" class="name">
+        <input type="text" placeholder="指定特技" class="skill">
+        <input type="text" placeholder="参加条件" class="condition">
+        <input type="text" placeholder="ペナルティ" class="penalty">
+      `;
+      container.appendChild(div);
+    }
+
+    function wrapTextLines(ctx, text, maxWidth) {
+      const chars = text.split('');
+      let line = '';
+      let lines = [];
+      for (let i = 0; i < chars.length; i++) {
+        let testLine = line + chars[i];
+        if (ctx.measureText(testLine).width > maxWidth && line !== '') {
+          lines.push(line);
+          line = chars[i];
+        } else {
+          line = testLine;
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    function drawRoundedRect(ctx, x, y, width, height, radius, color, thickness) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = thickness;
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawSheet() {
+      const title = document.getElementById('title').value || "無題の儀式";
+      const bgColor = document.getElementById('bgColor').value;
+      const borderColor = document.getElementById('borderColor').value;
+      const textColor = document.getElementById('textColor').value;
+
+      const names = document.querySelectorAll('.name');
+      const skills = document.querySelectorAll('.skill');
+      const conditions = document.querySelectorAll('.condition');
+      const penalties = document.querySelectorAll('.penalty');
+
+      const data = [];
+      for (let i = 0; i < names.length; i++) {
+        const row = {
+          name: names[i].value.trim(),
+          skill: skills[i].value.trim(),
+          condition: conditions[i].value.trim(),
+          penalty: penalties[i].value.trim()
+        };
+        if (row.name || row.skill || row.condition || row.penalty) {
+          data.push(row);
+        }
+      }
+
+      ctx.font = baseFont;
+
+      const headers = ["段階", "手順の名前", "指定特技", "参加条件", "ペナルティ"];
+      const headerHeights = headers.map((text, i) => {
+        const width = colWidths[i] - padding * 2;
+        return wrapTextLines(ctx, text, width).length * lineHeight + padding * 2;
+      });
+      const headerHeight = Math.max(...headerHeights);
+
+      const rowHeights = data.map((row, rIndex) => {
+        const contents = [
+          `${rIndex + 1}`,
+          row.name,
+          row.skill,
+          row.condition,
+          row.penalty
+        ];
+        const heights = contents.map((text, i) => {
+          const width = colWidths[i] - padding * 2;
+          return wrapTextLines(ctx, text, width).length * lineHeight + padding * 2;
+        });
+        return Math.max(...heights);
+      });
+
+      const titleHeight = 60;
+      const dataHeight = rowHeights.reduce((a, b) => a + b, 0);
+      const logicalHeight = titleHeight + headerHeight + dataHeight;
+      const roundedHeight = Math.ceil(logicalHeight / 100) * 100;
+
+      canvas.width = canvasWidth;
+      canvas.height = roundedHeight;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // タイトル（マーカー背景つき）
+      ctx.font = "28px 'Yuji Mai'";
+      const titleText = "儀式シート：「" + title + "」";
+      const textWidth = ctx.measureText(titleText).width;
+      const textX = (canvas.width - textWidth) / 2;
+      const textY = titleHeight / 2;
+
+      // マーカー背景
+      const markerHeight = 34;
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(textX - 10, textY - markerHeight / 2, textWidth + 20, markerHeight);
+
+      ctx.fillStyle = textColor;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(titleText, canvas.width / 2, textY);
+
+      // 表の背景
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, titleHeight, canvas.width, logicalHeight - titleHeight);
+
+      ctx.font = baseFont;
+      ctx.fillStyle = textColor;
+      ctx.strokeStyle = borderColor;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+
+      // ヘッダー
+      let y = titleHeight;
+      let x = 0;
+      for (let i = 0; i < headers.length; i++) {
+        const cellWidth = colWidths[i];
+        const lines = wrapTextLines(ctx, headers[i], cellWidth - padding * 2);
+        ctx.strokeRect(x, y, cellWidth, headerHeight);
+        const textY = y + (headerHeight - lines.length * lineHeight) / 2;
+        lines.forEach((line, j) => {
+          ctx.fillText(line, x + padding, textY + j * lineHeight);
+        });
+        x += cellWidth;
+      }
+      y += headerHeight;
+
+      // データ
+      for (let r = 0; r < data.length; r++) {
+        const row = [
+          `${r + 1}`,
+          data[r].name,
+          data[r].skill,
+          data[r].condition,
+          data[r].penalty
+        ];
+        const rowHeight = rowHeights[r];
+        x = 0;
+        for (let c = 0; c < row.length; c++) {
+          const cellWidth = colWidths[c];
+          const lines = wrapTextLines(ctx, row[c], cellWidth - padding * 2);
+          ctx.strokeRect(x, y, cellWidth, rowHeight);
+          const textY = y + (rowHeight - lines.length * lineHeight) / 2;
+          lines.forEach((line, j) => {
+            ctx.fillText(line, x + padding, textY + j * lineHeight);
+          });
+          x += cellWidth;
+        }
+        y += rowHeight;
+      }
+
+      // 外枠（角丸）
+      drawRoundedRect(ctx, 0, titleHeight, canvas.width, logicalHeight - titleHeight, 8, borderColor, 2);
+
+      // 左上に比率注釈
+      ctx.font = "10px sans-serif";
+      ctx.fillStyle = "#888888";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText(`縦${roundedHeight}×横${canvas.width}`, 5, 5);
+    }
+
+    document.getElementById('downloadBtn').addEventListener('click', function () {
+      const link = document.createElement('a');
+      link.download = '儀式シート.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+
+    addStep();
+  </script>
+</body>
+</html>
