@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>URLメモ & キャラクターJSON管理</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 1rem;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin: 4px 0;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 8px;
+      margin-top: 6px;
+      width: 100%;
+      background-color: #1976d2;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .section {
+      margin-top: 2rem;
+    }
+    .entry, .character {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-top: 1rem;
+      position: relative;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .character img {
+      width: 50px;
+      height: 50px;
+      object-fit: cover;
+      aspect-ratio: 1 / 1;
+      border-radius: 4px;
+      vertical-align: top;
+      margin-right: 8px;
+      display: block;
+    }
+    .remove-button {
+      width: 40px;
+      height: 60px;
+      border-radius: 8px;
+      background-color: #d32f2f;
+      color: white;
+      font-weight: bold;
+      font-size: 1rem;
+    }
+    .copy-button {
+      width: 100px;
+      height: 30px;
+      margin-top: 4px;
+    }
+    .char-url {
+      font-size: 0.75rem;
+      color: #666;
+      display: block;
+      margin-top: 4px;
+      text-align: center;
+    }
+    .char-note {
+      font-size: 0.8rem;
+      color: #444;
+      margin-top: 4px;
+    }
+    .export-controls {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .export-controls button {
+      width: auto;
+      padding: 10px 20px;
+      border-radius: 12px;
+      border: 2px solid black;
+      background-color: transparent;
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .char-info {
+      display: flex;
+      align-items: flex-start;
+    }
+    .char-info-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-right: 10px;
+    }
+    .char-info-content {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <h1>URLメモ & キャラJSON管理</h1>
+
+  <div class="export-controls">
+    <button onclick="exportHtmlFullPage()">メモ部分をHTMLとして保存</button>
+    <button onclick="exportFullTxt()">表示状態を保存</button>
+    <input type="file" accept=".txt" onchange="importFullTxt(event)" />
+  </div>
+
+  <div class="section" id="urlSection">
+    <h2>URLメモ</h2>
+    <input type="text" id="urlTitle" placeholder="ルーム名やメモのタイトル" />
+    <input type="text" id="urlValue" placeholder="URL" />
+    <button onclick="addUrlEntry()">URLを追加</button>
+    <div id="urlList"></div>
+  </div>
+
+  <div class="section" id="charSection">
+    <h2>キャラクター登録</h2>
+    <input type="text" id="charName" placeholder="キャラクター名" />
+    <input type="text" id="charIcon" placeholder="キャラクターのアイコンURL (50x50) 任意" />
+    <textarea id="charNote" placeholder="キャラクターのメモ（任意）"></textarea>
+    <input type="text" id="charUrl" placeholder="キャラクターに関連するURL (任意)" />
+    <textarea id="charJson" placeholder="キャラクターJSON（ココフォリア用）"></textarea>
+    <button onclick="addCharacter()">キャラクターを登録</button>
+    <div id="charList"></div>
+  </div>
+
+  <script>
+    let urlEntries = JSON.parse(localStorage.getItem('urlEntries') || '[]');
+    let characters = JSON.parse(localStorage.getItem('characters') || '[]');
+
+    function saveToStorage() {
+      localStorage.setItem('urlEntries', JSON.stringify(urlEntries));
+      localStorage.setItem('characters', JSON.stringify(characters));
+    }
+
+    function addUrlEntry() {
+      const title = document.getElementById('urlTitle').value;
+      const url = document.getElementById('urlValue').value;
+      if (!title || !url) return alert('タイトルとURLを入力してください');
+      urlEntries.push({ title, url });
+      document.getElementById('urlTitle').value = '';
+      document.getElementById('urlValue').value = '';
+      saveToStorage();
+      renderUrlList();
+    }
+
+    function removeUrlEntry(index) {
+      urlEntries.splice(index, 1);
+      saveToStorage();
+      renderUrlList();
+    }
+
+    function renderUrlList() {
+      const list = document.getElementById('urlList');
+      list.innerHTML = '';
+      urlEntries.forEach((entry, index) => {
+        const div = document.createElement('div');
+        div.className = 'entry';
+        div.innerHTML = `
+          <div>
+            <strong>${entry.title}</strong><br>
+            <a href="${entry.url}" target="_blank">${entry.url}</a>
+          </div>
+          <button class="remove-button" onclick="removeUrlEntry(${index})">消</button>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function addCharacter() {
+      const name = document.getElementById('charName').value;
+      const icon = document.getElementById('charIcon').value;
+      const url = document.getElementById('charUrl').value;
+      const json = document.getElementById('charJson').value;
+      const note = document.getElementById('charNote').value;
+      if (!name || !json) return alert('キャラ名とJSONは必須です');
+      characters.push({ name, icon, url, json, note });
+      document.getElementById('charName').value = '';
+      document.getElementById('charIcon').value = '';
+      document.getElementById('charUrl').value = '';
+      document.getElementById('charJson').value = '';
+      document.getElementById('charNote').value = '';
+      saveToStorage();
+      renderCharList();
+    }
+
+    function removeCharacter(index) {
+      characters.splice(index, 1);
+      saveToStorage();
+      renderCharList();
+    }
+
+    function renderCharList() {
+      const list = document.getElementById('charList');
+      list.innerHTML = '';
+      characters.forEach((char, index) => {
+        const div = document.createElement('div');
+        div.className = 'character';
+        div.innerHTML = `
+          <div class="char-info">
+            <div class="char-info-left">
+              <img src="${char.icon || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='}" alt="icon" />
+              ${char.url ? `<a class="char-url" href="${char.url}" target="_blank">URL</a>` : ''}
+            </div>
+            <div class="char-info-content">
+              <strong>${char.name}</strong>
+              ${char.note ? `<div class="char-note">${char.note}</div>` : ''}
+              <button class="copy-button" data-json="${encodeURIComponent(char.json)}" onclick="copyJson(this)">コマをコピー</button>
+            </div>
+          </div>
+          <button class="remove-button" onclick="removeCharacter(${index})">消</button>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function copyJson(button) {
+      const encoded = button.getAttribute('data-json');
+      const json = decodeURIComponent(encoded);
+      navigator.clipboard.writeText(json).then(() => {
+        alert('JSONをコピーしました！');
+      });
+    }
+
+    function exportHtmlFullPage() {
+      const urlListHtml = document.getElementById('urlList').innerHTML;
+      const charListHtml = document.getElementById('charList').innerHTML;
+      const styles = document.querySelector('style').innerHTML;
+
+      const htmlContent = `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>保存されたメモ</title>
+  <style>${styles}</style>
+</head>
+<body>
+  <h1>URLメモ & キャラJSON管理</h1>
+  <div class="section">
+    <h2>URLメモ</h2>
+    <div id="urlList">${urlListHtml}</div>
+  </div>
+  <div class="section">
+    <h2>キャラクター登録</h2>
+    <div id="charList">${charListHtml}</div>
+  </div>
+  <script>
+    function copyJson(button) {
+      const encoded = button.getAttribute('data-json');
+      const json = decodeURIComponent(encoded);
+      navigator.clipboard.writeText(json).then(() => {
+        alert('JSONをコピーしました！');
+      });
+    }
+  <\/script>
+</body>
+</html>`;
+
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'memo_export.html';
+      a.click();
+    }
+
+    function exportFullTxt() {
+      const data = {
+        urlEntries,
+        characters
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'memo_data.txt';
+      a.click();
+    }
+
+    function importFullTxt(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = JSON.parse(e.target.result);
+          urlEntries = data.urlEntries || [];
+          characters = data.characters || [];
+          saveToStorage();
+          renderUrlList();
+          renderCharList();
+        } catch (err) {
+          alert('読み込みに失敗しました。ファイル形式を確認してください。');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    renderUrlList();
+    renderCharList();
+  </script>
+</body>
+</html>
