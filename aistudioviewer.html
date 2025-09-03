@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Studio ログビューア</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* For custom scrollbar styling, optional */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1; /* Light mode track */
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #888;  /* Light mode thumb */
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #555; /* Light mode hover */
+    }
+  </style>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "uuid": "https://aistudiocdn.com/uuid@^11.1.0"
+  }
+}
+</script>
+</head>
+<body class="bg-gray-100 transition-colors duration-300">
+  <div id="root"></div>
+  <script type="text/babel">
+
+    // From utils.ts
+    const stripMarkdown = (text) => {
+      let strippedText = text;
+      // Remove code blocks fences but keep content for further stripping.
+      strippedText = strippedText.replace(/```[\s\S]*?```/g, (match) => 
+        match.substring(3, match.length - 3).trim() // Keep content, remove fences
+      ); 
+      strippedText = strippedText
+        .replace(/`([^`]+)`/g, '$1')     // Inline code (keep content)
+        .replace(/\*\*(.*?)\*\*|__(.*?)__/g, '$1$2') // Bold
+        .replace(/\*(.*?)\*|_(.*?)_/g, '$1$2')     // Italics
+        .replace(/~~(.*?)~~/g, '$1')               // Strikethrough
+        .replace(/\[(.*?)\]\(.*?\)/g, '$1')     // Links (keep text)
+        .replace(/^#+[ \u3000]*/gm, '')              // Headings (handles standard and full-width spaces)
+        .replace(/^\s*([-*+]|\d+\.)[ \u3000]+/gm, '') // List item markers (handles standard and full-width spaces)
+        .replace(/^>[ \u3000]*/gm, '')               // Blockquotes (handles standard and full-width spaces)
+        .replace(/^---\s*$|^\*\*\*\s*$|^___\s*$/gm, ''); // Horizontal rules
+      return strippedText;
+    };
+
+    // From components/LogDisplayItem.tsx
+    const escapeHtml = (unsafe) => {
+      return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    };
+
+    const renderSimpleMarkdown = (text, currentTextSize) => {
+      let html = text;
+      const baseMarkdownSizeClass = `text-${currentTextSize}`;
+
+      html = html.replace(/```(\w*)\n([\s\S]*?)\n```|```([\s\S]*?)```/g, (match, lang, code1, code2) => {
+        const codeContent = (code1 || code2 || '').replace(/^\n|\n$/g, '');
+        const langClass = lang ? `language-${lang}` : '';
+        const escapedCode = escapeHtml(codeContent);
+        return `<pre class="bg-gray-800 text-gray-200 p-2 my-1 rounded text-xs font-mono overflow-x-auto ${langClass}"><code>${escapedCode}</code></pre>`;
+      });
+
+      html = html.replace(/^>[ \u3000]?(.*$)/gm, `<blockquote class="border-l-4 border-gray-400 pl-3 my-1 italic text-gray-600 ${baseMarkdownSizeClass}">$1</blockquote>`);
+      
+      html = html.replace(/^######[ \u3000](.*$)/gm, `<h6 class="text-xs font-semibold my-1 ${baseMarkdownSizeClass} text-gray-900">$1</h6>`);
+      html = html.replace(/^#####[ \u3000](.*$)/gm, `<h5 class="text-sm font-semibold my-1 ${baseMarkdownSizeClass} text-gray-900">$1</h5>`);
+      html = html.replace(/^####[ \u3000](.*$)/gm, `<h4 class="text-base font-semibold my-1 ${baseMarkdownSizeClass} text-gray-900">$1</h4>`);
+      html = html.replace(/^###[ \u3000](.*$)/gm, `<h3 class="text-lg font-semibold my-1 ${baseMarkdownSizeClass} text-gray-900">$1</h3>`);
+      html = html.replace(/^##[ \u3000](.*$)/gm, `<h2 class="text-xl font-semibold my-1 ${baseMarkdownSizeClass} text-gray-900">$1</h2>`);
+      html = html.replace(/^#[ \u3000](.*$)/gm, `<h1 class="text-2xl font-bold my-1 ${baseMarkdownSizeClass} text-gray-900">$1</h1>`);
+
+      html = html.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr class="my-2 border-gray-300" />');
+      
+      html = html.replace(/^(\s*[*+-][ \u3000]+)(.*)/gm, 'TEMP_UL_ITEM$2END_ITEM');
+      html = html.replace(/^(\s*\d+\.[ \u3000]+)(.*)/gm, 'TEMP_OL_ITEM$2END_ITEM');
+
+      html = html.replace(/\*\*(.*?)\*\*|__(.*?)__/g, '<strong>$1$2</strong>');
+      html = html.replace(/\*(.*?)\*|_(.*?)_/g, '<em>$1$2</em>');
+      html = html.replace(/~~(.*?)~~/g, '<del>$1$2</del>');
+      html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">$1</a>');
+      html = html.replace(/`([^`]+)`/g, '<code class="bg-gray-200 text-red-700 px-1 rounded text-xs font-mono">$1</code>');
+      
+      html = html.replace(/(TEMP_UL_ITEM.*?END_ITEM\s*)+/g, (match) => {
+        const items = match.split('END_ITEM').filter(item => item.trim()).map(item => `<li>${item.replace(/TEMP_UL_ITEM/g, '').trim()}</li>`).join('');
+        return `<ul class="list-disc list-inside my-1 pl-4 ${baseMarkdownSizeClass}">${items}</ul>`;
+      });
+      html = html.replace(/(TEMP_OL_ITEM.*?END_ITEM\s*)+/g, (match) => {
+        const items = match.split('END_ITEM').filter(item => item.trim()).map(item => `<li>${item.replace(/TEMP_OL_ITEM/g, '').trim()}</li>`).join('');
+        return `<ol class="list-decimal list-inside my-1 pl-4 ${baseMarkdownSizeClass}">${items}</ol>`;
+      });
+      html = html.replace(/TEMP_UL_ITEM|TEMP_OL_ITEM|END_ITEM/g, '');
+      
+      html = html.split('\n').map(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.length === 0) return ''; 
+        if (/^<(?:h[1-6]|ul|ol|li|pre|blockquote|hr|div|p)/i.test(trimmedLine)) {
+            return line;
+        }
+        return `<p class="${baseMarkdownSizeClass}">${line}</p>`; 
+      }).join('\n');
+      html = html.replace(new RegExp(`<p class="${baseMarkdownSizeClass}">\\s*(<(?:h[1-6]|ul|ol|li|pre|blockquote|hr|div)[^>]*>[\\s\\S]*?</(?:h[1-6]|ul|ol|li|pre|blockquote|hr|div)>)\\s*</p>`, 'gi'), '$1');
+      html = html.replace(/\n\n+/g, '\n'); 
+      
+      return html;
+    };
+
+    const getLineHighlightColor = (line, rules) => {
+      for (const rule of rules) {
+        if (rule.text && line.startsWith(rule.text)) {
+          return rule.color;
+        }
+      }
+      return null;
+    };
+
+    const getBlockHighlightColor = (text, rules) => {
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const color = getLineHighlightColor(line, rules);
+        if (color) return color;
+      }
+      return null;
+    };
+
+    const isDarkBg = (hexColor) => {
+      if (!hexColor || hexColor.length < 7 || !hexColor.startsWith('#')) return false; 
+      const r = parseInt(hexColor.slice(1, 3), 16);
+      const g = parseInt(hexColor.slice(3, 5), 16);
+      const b = parseInt(hexColor.slice(5, 7), 16);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance < 0.5;
+    };
+
+    const LogDisplayItem = ({ 
+      entry, 
+      userColor, 
+      modelColor, 
+      thoughtColor, 
+      markdownRenderMode, 
+      textSize,
+      highlightRules,
+      hideRules 
+    }) => {
+      let baseEntryBgColor = '';
+      let prefix = '';
+      let borderColorClass = '';
+
+      if (entry.role === 'user') {
+          baseEntryBgColor = userColor;
+          prefix = 'ユーザー:';
+          borderColorClass = 'border-blue-300';
+      } else if (entry.role === 'model') {
+          if (entry.isThought) {
+              baseEntryBgColor = thoughtColor;
+              prefix = 'モデル (思考):';
+              borderColorClass = 'border-yellow-400';
+          } else {
+              baseEntryBgColor = modelColor;
+              prefix = 'モデル:';
+              borderColorClass = 'border-green-300';
+          }
+      }
+      
+      const blockHighlightColorForRender = markdownRenderMode === 'render' ? getBlockHighlightColor(entry.text, highlightRules) : null;
+      const effectiveBlockBgColor = blockHighlightColorForRender || baseEntryBgColor;
+
+      let overallTextColorClass = isDarkBg(effectiveBlockBgColor) ? 'text-white' : 'text-gray-800';
+      const textSizeClass = `text-${textSize}`;
+
+      const renderText = () => {
+        const originalLines = entry.text.split('\n');
+
+        if (markdownRenderMode === 'render') {
+          const visibleLinesForMarkdown = originalLines.filter(line => 
+            !hideRules.some(rule => rule.text && line.startsWith(rule.text))
+          );
+          if (visibleLinesForMarkdown.length === 0) return null;
+
+          const textForMarkdownRender = visibleLinesForMarkdown.join('\n');
+          const renderedHtml = renderSimpleMarkdown(textForMarkdownRender, textSize);
+          return <div className={`font-sans ${textSizeClass} ${overallTextColorClass} prose max-w-none`} dangerouslySetInnerHTML={{ __html: renderedHtml }} />;
+        }
+
+        const lineElements = originalLines.map((line, index) => {
+          const isHidden = hideRules.some(rule => rule.text && line.startsWith(rule.text));
+          if (isHidden) return null;
+
+          const lineHighlightColor = getLineHighlightColor(line, highlightRules);
+          const currentLineBgStyle = lineHighlightColor ? { backgroundColor: lineHighlightColor } : {};
+          
+          const currentLineTextColorClass = lineHighlightColor 
+                                            ? (isDarkBg(lineHighlightColor) ? 'text-white' : 'text-gray-800')
+                                            : overallTextColorClass;
+
+          let processedLine = line;
+          if (markdownRenderMode === 'strip') {
+            processedLine = stripMarkdown(line);
+          }
+          
+          return (
+            <div 
+              key={index} 
+              style={currentLineBgStyle} 
+              className={`${textSizeClass} ${currentLineTextColorClass} ${lineHighlightColor ? 'py-0.5 px-0.5' : ''} min-h-[1em]`}
+            >
+              {processedLine.length > 0 ? processedLine : <>&nbsp;</>}
+            </div>
+          );
+        }).filter(Boolean);
+
+        if (lineElements.length === 0) return null;
+
+        return <pre className={`whitespace-pre-wrap font-sans`}>{lineElements}</pre>;
+      };
+
+      const contentToRender = renderText();
+
+      if (!contentToRender) {
+        return null;
+      }
+
+      return (
+        <div className="flex justify-start mb-3" role="listitem"> 
+          <div
+            className={`p-3 rounded-lg shadow-md max-w-xl lg:max-w-2xl xl:max-w-3xl break-words border-l-4 ${borderColorClass}`}
+            style={{ backgroundColor: effectiveBlockBgColor }}
+            aria-label={`${prefix} ログエントリー`}
+          >
+            <strong className={`font-semibold block mb-1 ${textSizeClass} ${overallTextColorClass}`}>{prefix}</strong>
+            {contentToRender}
+          </div>
+        </div>
+      );
+    };
+
+    // From components/Controls.tsx
+    const Controls = ({
+      userColor, setUserColor, modelColor, setModelColor, thoughtColor, setThoughtColor,
+      viewFilter, setViewFilter, markdownRenderMode, setMarkdownRenderMode,
+      textSize, setTextSize,
+      highlightRules, addHighlightRule, removeHighlightRule, updateHighlightRuleColor,
+      hideRules, addHideRule, removeHideRule,
+    }) => {
+      const [highlightInput, setHighlightInput] = React.useState('');
+      const [highlightColorInput, setHighlightColorInput] = React.useState('#ffff00'); // Default yellow
+      const [hideInput, setHideInput] = React.useState('');
+
+      const filterOptions = [
+        { label: 'すべて', value: 'all' },
+        { label: 'ユーザープロンプト', value: 'user' },
+        { label: 'モデルレスポンス', value: 'model' },
+        { label: 'モデルの思考', value: 'thought'},
+      ];
+
+      const markdownOptions = [
+        { label: 'そのまま表示', value: 'asis' },
+        { label: 'Markdownを削除', value: 'strip' },
+        { label: 'Markdownをレンダリング', value: 'render' },
+      ];
+
+      const textSizeOptions = [
+        { label: 'XS', value: 'xs' },
+        { label: 'S', value: 'sm' },
+        { label: 'M', value: 'base' },
+        { label: 'L', value: 'lg' },
+        { label: 'XL', value: 'xl' },
+      ];
+
+      const handleFilterClick = (clickedFilter) => {
+        if (clickedFilter === 'all') {
+          setViewFilter(['all']);
+        } else {
+          let newFilters = viewFilter.includes('all') ? [] : [...viewFilter];
+          if (newFilters.includes(clickedFilter)) {
+            newFilters = newFilters.filter(f => f !== clickedFilter);
+          } else {
+            newFilters.push(clickedFilter);
+          }
+          if (newFilters.length === 0) {
+            setViewFilter(['all']);
+          } else {
+            setViewFilter(newFilters.filter(f => f !== 'all'));
+          }
+        }
+      };
+
+      const handleAddHighlightRule = () => {
+        if (highlightInput.trim() === '') return;
+        addHighlightRule(highlightInput, highlightColorInput);
+        setHighlightInput('');
+      };
+
+      const handleAddHideRule = () => {
+        if (hideInput.trim() === '') return;
+        addHideRule(hideInput);
+        setHideInput('');
+      };
+
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-8 p-4 border border-gray-200 rounded-lg bg-gray-50 shadow transition-colors duration-300">
+          {/* Color Pickers Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-700">色のカスタマイズ</h3>
+            <div className="flex items-center space-x-3">
+              <label htmlFor="userColor" className="text-sm font-medium text-gray-600 w-32">ユーザープロンプト:</label>
+              <input type="color" id="userColor" value={userColor} onChange={(e) => setUserColor(e.target.value)} className="h-8 w-14 rounded border border-gray-300 cursor-pointer" aria-label="ユーザープロンプトの色"/>
+            </div>
+            <div className="flex items-center space-x-3">
+              <label htmlFor="modelColor" className="text-sm font-medium text-gray-600 w-32">モデルレスポンス:</label>
+              <input type="color" id="modelColor" value={modelColor} onChange={(e) => setModelColor(e.target.value)} className="h-8 w-14 rounded border border-gray-300 cursor-pointer" aria-label="モデルレスポンスの色"/>
+            </div>
+            <div className="flex items-center space-x-3">
+              <label htmlFor="thoughtColor" className="text-sm font-medium text-gray-600 w-32">モデルの思考:</label>
+              <input type="color" id="thoughtColor" value={thoughtColor} onChange={(e) => setThoughtColor(e.target.value)} className="h-8 w-14 rounded border border-gray-300 cursor-pointer" aria-label="モデルの思考の色"/>
+            </div>
+          </div>
+
+          {/* View Filter Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-700">表示フィルター</h3>
+            <div className="flex flex-wrap gap-2">
+              {filterOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleFilterClick(opt.value)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-opacity-50
+                    ${viewFilter.includes(opt.value)
+                      ? 'bg-blue-600 text-white focus:ring-blue-500' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-400'
+                    }`}
+                  aria-pressed={viewFilter.includes(opt.value)}
+                  aria-label={`フィルター ${opt.label}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Text Size Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-700">文字サイズ</h3>
+            <div className="flex flex-wrap gap-2">
+              {textSizeOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setTextSize(opt.value)}
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-opacity-50
+                    ${textSize === opt.value 
+                      ? 'bg-teal-600 text-white focus:ring-teal-500' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-400'
+                    }`}
+                  aria-pressed={textSize === opt.value}
+                  aria-label={`文字サイズ ${opt.label}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Markdown Display Style Section */}
+          <div className="md:col-span-3 space-y-3 pt-4">
+            <h3 className="text-lg font-semibold text-gray-700">Markdown 表示スタイル</h3>
+            <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:flex-wrap sm:gap-2">
+              {markdownOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setMarkdownRenderMode(opt.value)}
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-opacity-50 w-full sm:w-auto
+                    ${markdownRenderMode === opt.value
+                      ? 'bg-purple-600 text-white focus:ring-purple-500'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-400'
+                    }`}
+                  aria-pressed={markdownRenderMode === opt.value}
+                  aria-label={`Markdownスタイル ${opt.label}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {markdownRenderMode === 'render' && (
+              <p className="text-xs text-gray-500 mt-1">
+                基本的なMarkdownレンダリング（太字、斜体、コード、リンク、簡単なリスト/ブロック）。複雑なドキュメントには専用ツールを使用してください。
+              </p>
+            )}
+          </div>
+
+          {/* Highlight Rules Section */}
+          <div className="md:col-span-3 space-y-4 pt-4">
+            <h3 className="text-lg font-semibold text-gray-700">次で始まる行をハイライト</h3>
+            <div className="flex items-center gap-2">
+              <input 
+                type="text" 
+                value={highlightInput} 
+                onChange={(e) => setHighlightInput(e.target.value)}
+                placeholder="ハイライトするテキスト..."
+                className="flex-grow p-2 border border-gray-300 rounded-md text-sm bg-white focus:ring-blue-500 focus:border-blue-500"
+                aria-label="ハイライトする行の開始テキスト"
+              />
+              <input 
+                type="color" 
+                value={highlightColorInput} 
+                onChange={(e) => setHighlightColorInput(e.target.value)}
+                className="h-10 w-14 rounded border border-gray-300 cursor-pointer"
+                aria-label="ハイライト色"
+              />
+              <button onClick={handleAddHighlightRule} className="px-4 py-2 text-sm bg-sky-500 text-white rounded-md hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-50" aria-label="ハイライトルールを追加">追加</button>
+            </div>
+            <div className="space-y-2">
+              {highlightRules.map(rule => (
+                <div key={rule.id} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
+                  <span className="text-sm text-gray-700 truncate" title={rule.text}>"{rule.text}"</span>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="color" 
+                      value={rule.color} 
+                      onChange={(e) => updateHighlightRuleColor(rule.id, e.target.value)}
+                      className="h-7 w-10 rounded border border-gray-300 cursor-pointer"
+                      aria-label={`ルール "${rule.text}" の色を変更`}
+                    />
+                    <button onClick={() => removeHighlightRule(rule.id)} className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 focus:outline-none focus:ring-1 focus:ring-red-400" aria-label={`ハイライトルール "${rule.text}" を削除`}>削除</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Hide Rules Section */}
+          <div className="md:col-span-3 space-y-4 pt-4">
+            <h3 className="text-lg font-semibold text-gray-700">次で始まる行を非表示</h3>
+            <div className="flex items-center gap-2">
+              <input 
+                type="text" 
+                value={hideInput} 
+                onChange={(e) => setHideInput(e.target.value)}
+                placeholder="非表示にするテキスト..."
+                className="flex-grow p-2 border border-gray-300 rounded-md text-sm bg-white focus:ring-blue-500 focus:border-blue-500"
+                aria-label="非表示にする行の開始テキスト"
+              />
+              <button onClick={handleAddHideRule} className="px-4 py-2 text-sm bg-rose-500 text-white rounded-md hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-opacity-50" aria-label="非表示ルールを追加">追加</button>
+            </div>
+            <div className="space-y-2">
+              {hideRules.map(rule => (
+                <div key={rule.id} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
+                  <span className="text-sm text-gray-700 truncate" title={rule.text}>"{rule.text}"</span>
+                  <button onClick={() => removeHideRule(rule.id)} className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 focus:outline-none focus:ring-1 focus:ring-red-400" aria-label={`非表示ルール "${rule.text}" を削除`}>削除</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // From components/LogDisplay.tsx
+    const LogDisplay = ({
+      parsedLogData,
+      userColor,
+      modelColor,
+      thoughtColor,
+      viewFilter,
+      markdownRenderMode,
+      textSize,
+      highlightRules,
+      hideRules,
+    }) => {
+      const [copyStatus, setCopyStatus] = React.useState('');
+
+      const filteredEntries = React.useMemo(() => {
+        if (!parsedLogData || !parsedLogData.entries) return [];
+        
+        let entries = parsedLogData.entries;
+
+        if (hideRules.length > 0) {
+          entries = entries.filter(entry => {
+            if (!entry.text) return true;
+            const lines = entry.text.split('\n');
+            const visibleLines = lines.filter(line => 
+              !hideRules.some(rule => rule.text && line.startsWith(rule.text))
+            );
+            return visibleLines.length > 0;
+          });
+        }
+        
+        if (viewFilter.includes('all') || viewFilter.length === 0) {
+          return entries;
+        }
+
+        return entries.filter(entry => {
+          if (viewFilter.includes('user') && entry.role === 'user') {
+            return true;
+          }
+          if (viewFilter.includes('model') && entry.role === 'model' && !entry.isThought) {
+            return true;
+          }
+          if (viewFilter.includes('thought') && entry.role === 'model' && entry.isThought) {
+            return true;
+          }
+          return false;
+        });
+      }, [parsedLogData, viewFilter, hideRules]);
+
+      const getFormattedTextForExport = (entriesToExport, stripMd) => {
+        return entriesToExport.map(entry => {
+          let prefix = '';
+          if (entry.role === 'user') {
+            prefix = 'ユーザー:';
+          } else if (entry.role === 'model') {
+            prefix = entry.isThought ? 'モデル (思考):' : 'モデル:';
+          }
+          
+          const lines = entry.text.split('\n');
+          const visibleLines = lines.filter(line => 
+            !hideRules.some(rule => rule.text && line.startsWith(rule.text))
+          ).join('\n');
+
+          const textContent = stripMd ? stripMarkdown(visibleLines) : visibleLines;
+          return `${prefix}\n${textContent}\n\n`;
+        }).join('');
+      };
+
+      const handleCopyToClipboard = () => {
+        const textToCopy = getFormattedTextForExport(filteredEntries, markdownRenderMode === 'strip');
+        navigator.clipboard.writeText(textToCopy).then(() => {
+          setCopyStatus('コピーしました！');
+          setTimeout(() => setCopyStatus(''), 2000);
+        }).catch(err => {
+          setCopyStatus('コピー失敗');
+          console.error('テキストのコピーに失敗しました: ', err);
+          setTimeout(() => setCopyStatus(''), 2000);
+        });
+      };
+
+      const handleDownloadText = () => {
+        const textToDownload = getFormattedTextForExport(filteredEntries, markdownRenderMode === 'strip');
+        const blob = new Blob([textToDownload], { type: 'text/plain;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'ai_studio_log_export.txt';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+      };
+
+      if (!parsedLogData) {
+        return null; 
+      }
+
+      return (
+        <div className="mt-6" role="log" aria-live="polite">
+          <div className="flex justify-end items-center space-x-3 mb-3">
+            <button
+              onClick={handleCopyToClipboard}
+              className="px-4 py-2 text-sm bg-indigo-500 text-white rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-50 transition-colors"
+              aria-label="表示されているログテキストをクリップボードにコピー"
+            >
+              表示テキストをコピー
+            </button>
+            {copyStatus && <span className="text-sm text-indigo-600" aria-live="assertive">{copyStatus}</span>}
+            <button
+              onClick={handleDownloadText}
+              className="px-4 py-2 text-sm bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-50 transition-colors"
+              aria-label="表示されているログテキストを.txtファイルとしてダウンロード"
+            >
+              表示テキストをダウンロード (.txt)
+            </button>
+          </div>
+
+          <div className="mt-1 space-y-1 max-h-[70vh] overflow-y-auto p-4 bg-white rounded-md border border-gray-200 shadow-inner transition-colors duration-300" role="list">
+            {filteredEntries.length > 0 ? (
+              filteredEntries.map(entry => (
+                <LogDisplayItem 
+                  key={entry.id} 
+                  entry={entry} 
+                  userColor={userColor} 
+                  modelColor={modelColor} 
+                  thoughtColor={thoughtColor}
+                  markdownRenderMode={markdownRenderMode}
+                  textSize={textSize}
+                  highlightRules={highlightRules}
+                  hideRules={hideRules}
+                />
+              ))
+            ) : (
+              <p className="text-gray-500 p-4 text-center">現在のフィルターで表示するログエントリはありません。</p>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // From App.tsx
+    const extractPythonStringContent = (quotedString) => {
+      if ((quotedString.startsWith('"""') && quotedString.endsWith('"""')) || (quotedString.startsWith("'''") && quotedString.endsWith("'''"))) {
+        return quotedString.substring(3, quotedString.length - 3);
+      }
+      if ((quotedString.startsWith('"') && quotedString.endsWith('"')) || (quotedString.startsWith("'") && quotedString.endsWith("'"))) {
+        return quotedString.substring(1, quotedString.length - 1);
+      }
+      return quotedString;
+    };
+
+
+    const parsePythonLogContent = (pythonCode) => {
+      const entries = [];
+      let modelName = undefined;
+
+      const modelNameRegex = /model\s*=\s*["'](.*?)["']/;
+      const modelMatch = pythonCode.match(modelNameRegex);
+      if (modelMatch && modelMatch[1]) {
+        modelName = modelMatch[1];
+      }
+
+      let extractedContentsString = null;
+      const primaryContentsRegex = /(?:^\s*|\n\s*)contents\s*=\s*\[([\s\S]*?)\]\s*(?:(?:#.*)|(?:generate_content_config\s*=)|(?:for\s+[^:]*:)|(?:if\s+__name__\s*==\s*["']__main__["']\s*:)|\s*(?:def\s+[^:]*:)|$)/s;
+      let contentsMatch = pythonCode.match(primaryContentsRegex);
+
+      if (contentsMatch && typeof contentsMatch[1] === 'string') {
+        extractedContentsString = contentsMatch[1];
+      } else {
+        const fallbackContentsRegex = /(?:^\s*|\n\s*)contents\s*=\s*\[([\s\S]*?)\]\s*(?:(?:#.*)|(?:for\s+)|(?:if\s+__name__)|(?:def\s+)|$)/s;
+        contentsMatch = pythonCode.match(fallbackContentsRegex);
+        if (contentsMatch && typeof contentsMatch[1] === 'string') {
+          extractedContentsString = contentsMatch[1];
+        }
+      }
+
+      if (extractedContentsString === null) {
+        console.error("Could not find or parse the 'contents = [...]' list in Python code.");
+        return { modelName, entries: [] }; 
+      }
+      
+      const contentsStr = extractedContentsString;
+      const contentBlockRegex = /types\.Content\s*\(([\s\S]*?)\)(?=\s*,\s*types\.Content|\s*,\s*$|\s*$|\s*\])/g;
+      let contentBlockMatch;
+      let entryIdCounter = 0;
+
+      while ((contentBlockMatch = contentBlockRegex.exec(contentsStr)) !== null) {
+        const contentArgs = contentBlockMatch[1];
+        const roleRegex = /role\s*=\s*["'](user|model)["']/;
+        const roleMatch = contentArgs.match(roleRegex);
+        if (!roleMatch || !roleMatch[1]) continue;
+        const role = roleMatch[1];
+
+        const partsListRegex = /parts\s*=\s*\[([\s\S]*?)\]/;
+        const partsMatch = contentArgs.match(partsListRegex);
+        if (!partsMatch || !partsMatch[1]) continue;
+        const partsStr = partsMatch[1];
+
+        const partTexts = [];
+        const partRegex = /types\.Part\.from_text\s*\(\s*text\s*=\s*((["']{3}|["'])(?:[\s\S](?!\2))*?[\s\S]\2|[a-zA-Z_][\w]*)\s*\)/g;
+        let singlePartMatch;
+        while ((singlePartMatch = partRegex.exec(partsStr)) !== null) {
+          const textValueWithQuotes = singlePartMatch[1];
+          if (singlePartMatch[2]) { 
+            partTexts.push(extractPythonStringContent(textValueWithQuotes));
+          } else { 
+            console.warn(`Encountered variable '${textValueWithQuotes}' as text in Python log. This parser expects direct string literals.`);
+            partTexts.push(`[変数: ${textValueWithQuotes}]`);
+          }
+        }
+
+        if (role === 'user' && partTexts.length > 0) {
+            entries.push({
+              id: `py-entry-${entryIdCounter++}-${Date.now()}`,
+              text: partTexts.join('\n'), 
+              role: 'user',
+              isThought: false,
+            });
+        } else if (role === 'model') {
+          if (partTexts.length === 1) {
+            entries.push({
+              id: `py-entry-${entryIdCounter++}-${Date.now()}`,
+              text: partTexts[0],
+              role: 'model',
+              isThought: false,
+            });
+          } else if (partTexts.length > 1) {
+            partTexts.forEach((partText, index) => {
+              entries.push({
+                id: `py-entry-${entryIdCounter++}-${Date.now()}`,
+                text: partText,
+                role: 'model',
+                isThought: index < partTexts.length - 1, 
+              });
+            });
+          }
+        }
+      }
+      
+      if (entries.length === 0 && contentsStr.includes("types.Content")) {
+            const singleContentBlockRegexFallback = /types\.Content\s*\(([\s\S]*?)\)/g; 
+            while ((contentBlockMatch = singleContentBlockRegexFallback.exec(contentsStr)) !== null) {
+                const contentArgs = contentBlockMatch[1];
+                const roleRegex = /role\s*=\s*["'](user|model)["']/;
+                const roleMatch = contentArgs.match(roleRegex);
+                if (!roleMatch || !roleMatch[1]) continue;
+                const role = roleMatch[1];
+
+                const partsListRegex = /parts\s*=\s*\[([\s\S]*?)\]/;
+                const partsMatch = contentArgs.match(partsListRegex);
+                if (!partsMatch || !partsMatch[1]) continue;
+                const partsStr = partsMatch[1];
+
+                const partTexts = [];
+                const partRegexFallback = /types\.Part\.from_text\s*\(\s*text\s*=\s*((["']{3}|["'])(?:[\s\S](?!\2))*?[\s\S]\2)\s*\)/g;
+                let singlePartMatchFallback;
+                while ((singlePartMatchFallback = partRegexFallback.exec(partsStr)) !== null) {
+                    partTexts.push(extractPythonStringContent(singlePartMatchFallback[1]));
+                }
+
+                if (role === 'user' && partTexts.length > 0) {
+                    entries.push({
+                        id: `py-fallback-entry-${entryIdCounter++}-${Date.now()}`,
+                        text: partTexts.join('\n'),
+                        role: 'user',
+                        isThought: false,
+                    });
+                } else if (role === 'model') {
+                    if (partTexts.length === 1) {
+                        entries.push({
+                            id: `py-fallback-entry-${entryIdCounter++}-${Date.now()}`,
+                            text: partTexts[0],
+                            role: 'model',
+                            isThought: false,
+                        });
+                    } else if (partTexts.length > 1) {
+                        partTexts.forEach((partText, index) => {
+                            entries.push({
+                                id: `py-fallback-entry-${entryIdCounter++}-${Date.now()}`,
+                                text: partText,
+                                role: 'model',
+                                isThought: index < partTexts.length - 1,
+                            });
+                        });
+                    }
+                }
+            }
+        }
+      return { modelName, entries };
+    };
+
+
+    const parseJsonLogContent = (jsonText) => {
+        const rawLog = JSON.parse(jsonText);
+        let modelName = undefined;
+
+        if (rawLog.runSettings && rawLog.runSettings.model) {
+          const modelPathParts = rawLog.runSettings.model.split('/');
+          modelName = modelPathParts.pop() || rawLog.runSettings.model;
+        }
+
+        if (!rawLog.chunkedPrompt || !Array.isArray(rawLog.chunkedPrompt.chunks)) {
+          throw new Error('無効なJSONログ構造: "chunkedPrompt.chunks" が見つからないか、配列ではありません。');
+        }
+
+        const entries = rawLog.chunkedPrompt.chunks.map((chunk, index) => ({
+          id: `json-entry-${index}-${Date.now()}`,
+          text: chunk.text || "",
+          role: chunk.role === 'user' ? 'user' : 'model',
+          isThought: chunk.isThought === true,
+        }));
+        return { modelName, entries };
+    }
+
+    const App = () => {
+      const [rawInput, setRawInput] = React.useState('');
+      const [parsedLogData, setParsedLogData] = React.useState(null);
+      const [error, setError] = React.useState(null);
+      const [logFormat, setLogFormat] = React.useState('json');
+
+      const [userColor, setUserColor] = React.useState('#e0f2fe');
+      const [modelColor, setModelColor] = React.useState('#dcfce7');
+      const [thoughtColor, setThoughtColor] = React.useState('#fef9c3');
+      const [viewFilter, setViewFilter] = React.useState(['all']);
+      const [markdownRenderMode, setMarkdownRenderMode] = React.useState('asis');
+      const [textSize, setTextSize] = React.useState('sm');
+      
+      const [highlightRules, setHighlightRules] = React.useState([]);
+      const [hideRules, setHideRules] = React.useState([]);
+
+      const addHighlightRule = (text, color) => {
+        if (text.trim() === '') return;
+        setHighlightRules(prev => [...prev, { id: uuid.v4(), text, color }]);
+      };
+      const removeHighlightRule = (id) => {
+        setHighlightRules(prev => prev.filter(rule => rule.id !== id));
+      };
+      const updateHighlightRuleColor = (id, color) => {
+        setHighlightRules(prev => prev.map(rule => rule.id === id ? { ...rule, color } : rule));
+      };
+      const addHideRule = (text) => {
+        if (text.trim() === '') return;
+        setHideRules(prev => [...prev, { id: uuid.v4(), text }]);
+      };
+      const removeHideRule = (id) => {
+        setHideRules(prev => prev.filter(rule => rule.id !== id));
+      };
+
+
+      const parseAndSetLog = React.useCallback((inputText, format) => {
+        try {
+          if (!inputText.trim()) {
+            setParsedLogData(null);
+            setError(null);
+            return;
+          }
+          
+          let parsedData = null;
+          if (format === 'json') {
+            parsedData = parseJsonLogContent(inputText);
+          } else if (format === 'python') {
+            parsedData = parsePythonLogContent(inputText);
+          } else {
+            setError("無効なログ形式が選択されました。");
+            setParsedLogData(null);
+            return;
+          }
+
+          if (parsedData) {
+            setParsedLogData(parsedData);
+            setError(null);
+          } else {
+            setError(`${format.toUpperCase()} ログの解析に失敗しました。構造が間違っている可能性があります。`);
+            setParsedLogData(null);
+          }
+
+        } catch (e) {
+          setError(`解析に失敗しました ${format.toUpperCase()}: ${e.message}. 入力が有効な ${format.toUpperCase()} であり、構造を確認してください。`);
+          setParsedLogData(null);
+        }
+      }, []);
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-100 to-sky-100 p-4 sm:p-6 lg:p-8 transition-colors duration-300">
+          <div className="max-w-7xl mx-auto bg-white shadow-2xl rounded-xl overflow-hidden transition-colors duration-300">
+            <header className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6 shadow-md">
+              <h1 className="text-4xl font-bold tracking-tight">AI Studio ログビューア</h1>
+              <p className="mt-2 text-indigo-100 text-opacity-90">
+                Google AI Studio の JSON ログまたは Python コードスニペットを以下に貼り付けて、書式設定、色分け、分析を行います。
+              </p>
+            </header>
+
+            <main className="p-6 space-y-8 bg-white transition-colors duration-300">
+              <div>
+                <label htmlFor="logInput" className="block text-xl font-semibold text-gray-800 mb-3">
+                  ログデータを貼り付け:
+                </label>
+                <textarea
+                  id="logInput"
+                  aria-label="ログデータをここに貼り付け"
+                  className="w-full h-48 p-4 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono bg-gray-50 text-gray-800 transition-shadow duration-150 hover:shadow-md placeholder-gray-400"
+                  value={rawInput}
+                  onChange={(e) => setRawInput(e.target.value)}
+                  placeholder={`AI Studio の ${logFormat.toUpperCase()} ログをここに...`}
+                />
+                <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between">
+                    <div className="flex items-center space-x-4 mb-3 sm:mb-0">
+                        <span className="text-sm font-medium text-gray-700">入力形式:</span>
+                        {['json', 'python'].map((format) => (
+                            <label key={format} className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                                type="radio"
+                                name="logFormat"
+                                value={format}
+                                checked={logFormat === format}
+                                onChange={() => setLogFormat(format)}
+                                className="form-radio h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 bg-gray-50"
+                            />
+                            <span className="text-sm text-gray-700">{format.toUpperCase()}</span>
+                            </label>
+                        ))}
+                    </div>
+                    <button
+                        onClick={() => parseAndSetLog(rawInput, logFormat)}
+                        className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-transform duration-150 active:scale-95 shadow-md hover:shadow-lg"
+                    >
+                        ログを解析して表示
+                    </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-red-100 border-l-4 border-red-600 text-red-800 p-4 rounded-md shadow" role="alert">
+                  <p className="font-bold text-lg">エラーが発生しました</p>
+                  <p className="text-sm">{error}</p>
+                </div>
+              )}
+
+              {parsedLogData && (
+                <>
+                  <Controls
+                    userColor={userColor} setUserColor={setUserColor}
+                    modelColor={modelColor} setModelColor={setModelColor}
+                    thoughtColor={thoughtColor} setThoughtColor={setThoughtColor}
+                    viewFilter={viewFilter} setViewFilter={setViewFilter}
+                    markdownRenderMode={markdownRenderMode} setMarkdownRenderMode={setMarkdownRenderMode}
+                    textSize={textSize} setTextSize={setTextSize}
+                    highlightRules={highlightRules} addHighlightRule={addHighlightRule}
+                    removeHighlightRule={removeHighlightRule} updateHighlightRuleColor={updateHighlightRuleColor}
+                    hideRules={hideRules} addHideRule={addHideRule} removeHideRule={removeHideRule}
+                  />
+                  <LogDisplay
+                    parsedLogData={parsedLogData}
+                    userColor={userColor}
+                    modelColor={modelColor}
+                    thoughtColor={thoughtColor}
+                    viewFilter={viewFilter}
+                    markdownRenderMode={markdownRenderMode}
+                    textSize={textSize}
+                    highlightRules={highlightRules}
+                    hideRules={hideRules}
+                  />
+                </>
+              )}
+              {!parsedLogData && !error && rawInput === '' && (
+                <div className="text-center py-10">
+                    <p className="text-gray-500 text-lg">入力形式を選択し、ログデータを上記に貼り付け、「解析して表示」をクリックして開始してください。</p>
+                </div>
+              )}
+            </main>
+            <footer className="p-6 bg-gray-50 border-t border-gray-200 text-center transition-colors duration-300">
+                <p className="text-sm text-gray-500">AI Studio ログビューア &copy; {new Date().getFullYear()}</p>
+            </footer>
+          </div>
+        </div>
+      );
+    };
+
+    const rootElement = document.getElementById('root');
+    if (!rootElement) {
+      throw new Error("Could not find root element to mount to");
+    }
+
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(
+        <App />
+    );
+
+  </script>
+</body>
+</html>
