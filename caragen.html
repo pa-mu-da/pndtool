@@ -31,8 +31,184 @@
   </style>
 </head>
 <body>
-  <h1>カード画像ジェネレーター</h1>
+<!-- ナビゲーションバー - ここから貼り付け開始 -->
+<style>
+  /* カラーテーマCSS変数 */
+  :root { /* Light Theme (Default) */
+    --app-bg-color: #f9fafb;
+    --app-text-color: #111827;
+    --header-bg-color: rgba(255, 255, 255, 0.8);
+    --modal-bg-color: #ffffff;
+    --button-hover-bg-color: #d1d5db;
+    --link-active-text-color: #3730a3;
+    --border-color: #d1d5db;
+  }
+  html.dark {
+    --app-bg-color: #111827;
+    --app-text-color: #f3f4f6;
+    --header-bg-color: rgba(31, 41, 55, 0.8);
+    --modal-bg-color: #1f2937;
+    --button-hover-bg-color: #6b7280;
+    --link-active-text-color: #e0e7ff;
+    --border-color: #4b5563;
+  }
+  html.theme-earth.dark {
+    --app-bg-color: #3e2723;
+    --app-text-color: #efebe9;
+    --header-bg-color: rgba(62, 39, 35, 0.8);
+    --modal-bg-color: #4e342e;
+    --button-hover-bg-color: #795548;
+    --link-active-text-color: #ffffff;
+    --border-color: #795548;
+  }
+  html.theme-pastel {
+    --app-bg-color: #fff0f5;
+    --app-text-color: #5c3c4c;
+    --header-bg-color: rgba(255, 240, 245, 0.8);
+    --modal-bg-color: #ffffff;
+    --button-hover-bg-color: #90e0d0;
+    --link-active-text-color: #333;
+    --border-color: #e1bee7;
+  }
+  html.theme-gray {
+    --app-bg-color: #f5f5f5;
+    --app-text-color: #333333;
+    --header-bg-color: rgba(238, 238, 238, 0.8);
+    --modal-bg-color: #ffffff;
+    --button-hover-bg-color: #bbbbbb;
+    --link-active-text-color: #ffffff;
+    --border-color: #b0b0b0;
+  }
+  
+  /* ナビゲーションバースタイル */
+  #top-nav-bar {
+    background-color: var(--header-bg-color);
+    color: var(--app-text-color);
+    border-bottom: 1px solid var(--border-color);
+    transition: all 0.3s;
+  }
+  
+  /* ドロップダウンスタイル */
+  .nav-dropdown {
+    position: relative;
+  }
+  .nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background-color: var(--modal-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-width: 200px;
+    z-index: 1000;
+    margin-top: 0.25rem;
+    padding: 0.5rem 0;
+  }
+  .nav-dropdown.active .nav-dropdown-menu {
+    display: block;
+  }
+  .nav-dropdown-menu a {
+    display: block;
+    padding: 0.5rem 1rem;
+    color: var(--app-text-color);
+    text-decoration: none;
+    transition: background-color 0.2s;
+  }
+  .nav-dropdown-menu a:hover {
+    background-color: var(--button-hover-bg-color);
+  }
+  .nav-dropdown-toggle {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+  }
+  .nav-dropdown-toggle:hover,
+  .nav-link:hover {
+    color: var(--link-active-text-color);
+  }
+  .nav-link {
+    text-decoration: none;
+    color: var(--app-text-color);
+    transition: color 0.2s;
+  }
+</style>
 
+<div id="top-nav-bar">
+  <div style="max-width: 1280px; margin: 0 auto; padding: 0.5rem 1rem; display: flex; align-items: center; justify-content: flex-end; gap: 1.5rem; font-size: 0.875rem;">
+        <div class="nav-dropdown">
+          <span class="nav-dropdown-toggle">NPC向け立ち絵配布</span>
+          <div class="nav-dropdown-menu">
+            <a href="https://tatie.pages.dev/">現代日本</a>
+            <a href="https://tatie2.pages.dev/">近未来・サイバーパンク</a>
+            <a href="https://onlooker.booth.pm/items/7630511">レトロ日本(booth)</a>
+          </div>
+        </div>
+        <div class="nav-dropdown">
+          <span class="nav-dropdown-toggle">TRPGに使えるツール類</span>
+          <div class="nav-dropdown-menu">
+            <a href="https://pa-mu-da.github.io/shape/">図形を手軽に作るやつ</a>
+            <a href="https://pa-mu-da.github.io/pndtool/caragen.html">カード画像作成ツール</a>
+            <a href="https://pa-mu-da.github.io/mojipanelmaker/">文字パネルメーカー</a>
+            <a href="https://pa-mu-da.github.io/solo_RPG_tool/">ソロRPGコンパニオン</a>
+          </div>
+        </div>
+        <a href="https://ttrpglinks.pages.dev/" class="nav-link">TRPGお役立ちリンク</a>
+  </div>
+</div>
+
+<script>
+  // DOMが完全に読み込まれてから実行
+  (function() {
+    'use strict';
+    
+    // DOMContentLoadedイベントを待つ
+    function initNavigation() {
+      const dropdownToggles = document.querySelectorAll('.nav-dropdown-toggle');
+      
+      if (dropdownToggles.length === 0) {
+        console.warn('ナビゲーションバーの要素が見つかりません');
+        return;
+      }
+      
+      dropdownToggles.forEach(toggle => {
+        toggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const dropdown = toggle.parentElement;
+          const wasActive = dropdown.classList.contains('active');
+          
+          // すべてのドロップダウンを閉じる
+          document.querySelectorAll('.nav-dropdown').forEach(d => d.classList.remove('active'));
+          
+          // 現在のドロップダウンをトグル
+          if (!wasActive) {
+            dropdown.classList.add('active');
+          }
+        });
+      });
+      
+      // 外側クリックでドロップダウンを閉じる
+      document.addEventListener('click', () => {
+        document.querySelectorAll('.nav-dropdown').forEach(d => d.classList.remove('active'));
+      });
+      
+      console.log('ナビゲーションバーが正常に初期化されました');
+    }
+    
+    // DOMが既に読み込まれている場合は即座に実行、そうでなければイベントを待つ
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initNavigation);
+    } else {
+      initNavigation();
+    }
+  })();
+</script>
+<!-- ナビゲーションバー - ここまで貼り付け終了 -->
+  <h1>カード画像ジェネレーター</h1>
+<p>文字が多めのカードを体裁を揃えて複数枚作れるツールです。</p>
+<p>このツールから生成される画像は全てユーザーの権利と責任の下に自由にご利用ください</p>
+<p>クレジットその他もろもろは不要です</p>
   <div>
     <label>カード幅: <input type="number" id="cardWidth" value="300"></label>
     <label>カード高さ: <input type="number" id="cardHeight" value="200"></label>
@@ -291,3 +467,4 @@
   </script>
 </body>
 </html>
+
