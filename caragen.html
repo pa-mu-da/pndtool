@@ -85,7 +85,7 @@
     background-color: var(--header-bg-color);
     color: var(--app-text-color);
     border-bottom: 1px solid var(--border-color);
-    transition: all 0.3s;
+    transition: colors 0.3s;
   }
   
   /* ドロップダウンスタイル */
@@ -122,31 +122,21 @@
   .nav-dropdown-toggle {
     cursor: pointer;
     user-select: none;
-    transition: color 0.2s;
-  }
-  .nav-dropdown-toggle:hover,
-  .nav-link:hover {
-    color: var(--link-active-text-color);
-  }
-  .nav-link {
-    text-decoration: none;
-    color: var(--app-text-color);
-    transition: color 0.2s;
   }
 </style>
 
 <div id="top-nav-bar">
   <div style="max-width: 1280px; margin: 0 auto; padding: 0.5rem 1rem; display: flex; align-items: center; justify-content: flex-end; gap: 1.5rem; font-size: 0.875rem;">
         <div class="nav-dropdown">
-          <span class="nav-dropdown-toggle">NPC向け立ち絵配布</span>
+          <span class="nav-dropdown-toggle hover:text-[--link-active-text-color] transition-colors">NPC向け立ち絵配布</span>
           <div class="nav-dropdown-menu">
             <a href="https://tatie.pages.dev/">現代日本</a>
             <a href="https://tatie2.pages.dev/">近未来・サイバーパンク</a>
-            <a href="https://onlooker.booth.pm/items/7630511">レトロ日本(booth)</a>
+            <a href="https://tatie3.pages.dev/">和風・時代劇</a>
           </div>
         </div>
         <div class="nav-dropdown">
-          <span class="nav-dropdown-toggle">TRPGに使えるツール類</span>
+          <span class="nav-dropdown-toggle hover:text-[--link-active-text-color] transition-colors">TRPGに使えるツール類</span>
           <div class="nav-dropdown-menu">
             <a href="https://pa-mu-da.github.io/shape/">図形を手軽に作るやつ</a>
             <a href="https://pa-mu-da.github.io/pndtool/caragen.html">カード画像作成ツール</a>
@@ -154,54 +144,34 @@
             <a href="https://pa-mu-da.github.io/solo_RPG_tool/">ソロRPGコンパニオン</a>
           </div>
         </div>
-        <a href="https://ttrpglinks.pages.dev/" class="nav-link">TRPGお役立ちリンク</a>
+        <a href="https://ttrpglinks.pages.dev/" class="hover:text-[--link-active-text-color] transition-colors">TRPGお役立ちリンク</a>
   </div>
 </div>
 
 <script>
-  // DOMが完全に読み込まれてから実行
+  // ドロップダウンナビゲーション
   (function() {
-    'use strict';
-    
-    // DOMContentLoadedイベントを待つ
-    function initNavigation() {
-      const dropdownToggles = document.querySelectorAll('.nav-dropdown-toggle');
-      
-      if (dropdownToggles.length === 0) {
-        console.warn('ナビゲーションバーの要素が見つかりません');
-        return;
-      }
-      
-      dropdownToggles.forEach(toggle => {
-        toggle.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const dropdown = toggle.parentElement;
-          const wasActive = dropdown.classList.contains('active');
-          
-          // すべてのドロップダウンを閉じる
-          document.querySelectorAll('.nav-dropdown').forEach(d => d.classList.remove('active'));
-          
-          // 現在のドロップダウンをトグル
-          if (!wasActive) {
-            dropdown.classList.add('active');
-          }
-        });
-      });
-      
-      // 外側クリックでドロップダウンを閉じる
-      document.addEventListener('click', () => {
+    const dropdownToggles = document.querySelectorAll('.nav-dropdown-toggle');
+    dropdownToggles.forEach(toggle => {
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const dropdown = toggle.parentElement;
+        const wasActive = dropdown.classList.contains('active');
+        
+        // すべてのドロップダウンを閉じる
         document.querySelectorAll('.nav-dropdown').forEach(d => d.classList.remove('active'));
+        
+        // 現在のドロップダウンをトグル
+        if (!wasActive) {
+          dropdown.classList.add('active');
+        }
       });
-      
-      console.log('ナビゲーションバーが正常に初期化されました');
-    }
+    });
     
-    // DOMが既に読み込まれている場合は即座に実行、そうでなければイベントを待つ
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initNavigation);
-    } else {
-      initNavigation();
-    }
+    // 外側クリックでドロップダウンを閉じる
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.nav-dropdown').forEach(d => d.classList.remove('active'));
+    });
   })();
 </script>
 <!-- ナビゲーションバー - ここまで貼り付け終了 -->
@@ -467,4 +437,5 @@
   </script>
 </body>
 </html>
+
 
